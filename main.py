@@ -1,39 +1,91 @@
-﻿from reportlab.lib.pagesizes import A4
-from reportlab.pdfgen import canvas
-from reportlab.lib.units import inch
-from reportlab.lib.utils import ImageReader
 import os
+import time
+import requests
+import speech_recognition as sr
+from gtts import gTTS
+from playsound import playsound
+from datetime import datetime
 
-# Config
-title = "Jarvis AI Project Report"
-description = "This is a multi-page report with watermark and logo."
-output_pdf = os.path.join("docs", "Jarvis_Report.pdf")
-logo_path = os.path.join("docs", "logo.png")  # You must add this manually
+# Initialize recognizer
+r = sr.Recognizer()
 
-def create_pdf():
-    c = canvas.Canvas(output_pdf, pagesize=A4)
-    width, height = A4
+# Voice output
+def speak(text):
+    print(f"[Jarvis]: {text}")
+    tts = gTTS(text=text, lang='en')
+    filename = "voice.mp3"
+    tts.save(filename)
+    playsound(filename)
+    os.remove(filename)
 
-    # First page with logo
-    if os.path.exists(logo_path):
-        c.drawImage(ImageReader(logo_path), inch, height - 2*inch, width=2*inch, preserveAspectRatio=True)
-    c.setFont("Helvetica-Bold", 24)
-    c.drawCentredString(width/2, height - 3*inch, "Jarvis AI")
-    c.setFont("Helvetica", 14)
-    c.drawString(inch, height - 4*inch, description)
-    c.setFont("Helvetica-Oblique", 10)
-    c.drawRightString(width - inch, 0.5*inch, "Jarvis AI")
-    c.showPage()
+# Voice input
+def listen():
+    with sr.Microphone() as source:
+        print("[Listening...]")
+        audio = r.listen(source, phrase_time_limit=5)
+        try:
+            query = r.recognize_google(audio)
+            print(f"[You]: {query}")
+            return query.lower()
+        except sr.UnknownValueError:
+            speak("Sorry, I didn't get that.")
+        except sr.RequestError:
+            speak("Sorry, voice service is not available.")
+    return ""
 
-    # Simulated multiple pages
-    for i in range(1, 6):
-        c.setFont("Helvetica", 14)
-        c.drawString(inch, height - inch, f"Page {i} - Sample content goes here...")
-        c.setFont("Helvetica-Oblique", 10)
-        c.drawRightString(width - inch, 0.5*inch, "Jarvis AI")  # watermark
-        c.showPage()
+# Commands
+def tell_time():
+    now = datetime.now().strftime("%H:%M")
+    speak(f"The current time is {now}")
 
-    c.save()
+def open_app(name):
+    try:
+        os.system(f"start {name}")
+        speak(f"Opening {name}")
+    except Exception:
+        speak(f"Failed to open {name}")
+
+def get_joke():
+    try:
+        res = requests.get("https://official-joke-api.appspot.com/random_joke").json()
+        speak(res['setup'])
+        time.sleep(2)
+        speak(res['punchline'])
+    except:
+        speak("Couldn't fetch a joke right now.")
+
+def search_wikipedia(query):
+    try:
+        res = requests.get(f"https://en.wikipedia.org/api/rest_v1/page/summary/{query}").json()
+        if 'extract' in res:
+            speak(res['extract'])
+        else:
+            speak("I couldn't find anything about that.")
+    except:
+        speak("An error occurred while searching Wikipedia.")
+
+def main():
+    speak("Hello boss, what to do today?")
+    while True:
+        command = listen()
+        if not command:
+            continue
+
+        if "time" in command:
+            tell_time()
+        elif "open" in command:
+            app_name = command.replace("open", "").strip()
+            open_app(app_name)
+        elif "joke" in command:
+            get_joke()
+        elif "wikipedia" in command:
+            topic = command.replace("wikipedia", "").strip()
+            search_wikipedia(topic)
+        elif "stop" in command or "exit" in command:
+            speak("Goodbye boss.")
+            break
+        else:
+            speak("Sorry, I don't understand that command.")
 
 if _name_ == "_main_":
-    create_pdf()
+    main()
